@@ -1,4 +1,4 @@
-from index_pyspark import Init, DataManager, PysparkUtils
+from index_pyspark import Init, DataManager
 
 from pyspark.sql.functions import col, udf
 from pyspark.sql.types import StringType

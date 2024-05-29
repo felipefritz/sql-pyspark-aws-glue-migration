@@ -2,18 +2,25 @@
 
 Esta plantilla está diseñada para facilitar la lectura y reutilización de código. A continuación, se describen las clases y directrices a seguir:
 
+## Configuraciones:
+1. Instalar requirements.txt = pip install -r requirements.txt
+2. Agregar a s3 un nuevo bucket y almacenar el archivo index_pyspark.py
+3. En las configuraciones del Job Glue añadir como dependencia el archivo index_pyspark.py
+4. El atribut Lib de la clase ambiente esta relacionado a un proyecto en especifico que carga variables de entorno de aws secretManager. si no es tu caso, puedes comentar lo relacionado a cargar variables de entorno y omitir el atributo LIB y sus metodos.
+
+
 ## Configuracion general:
 
-1. Usar el archivo index.py como referencia para realizar un nuevo Job
-   1. Copiar el contenido de **index.py** y tambien lo que esta en **terraform/glue.tf** y pegarlo en tu proyecto
+1. Usar el archivo template_base.py como referencia para realizar un nuevo Job
+   1. Copiar el contenido de **main_example.py**.
 2. Reemplazar la linea 4 en los archivos de variables de terraform (terraform/variables_desa.tfvars, etc..)
-   1. Usar este archivo: **"--extra-py-files" = "s3://sftp-ctabeneficio-dev/glue/LIBRARY/index_pyspark.py"**
+   1. Usar este archivo: **"--extra-py-files" = "s3://bucketName/index_pyspark.py"**
 
 3. El archivo template_base.py contiene un main mas limpio en el cual puedes adaptar el job a tu manera apoyandote en los archivos de /documentacion.
-4. El archivo index.py es una template con codigo que se utiliza para jobs de lecutra de tablas, insertar o actualizar tablas sql y generar interface.
+4. El archivo main_example.py es una template con codigo que se utiliza para jobs de lecutra de tablas, insertar o actualizar tablas sql y generar interface.
 
 ## Archivo index_pysppark.py
-5. Este archivo es el que contiene todo el codigo que esta en bucket de S3 al cual hace referencia tu proyecto ( Ya no es Index.py)
+5. Este archivo es el que contiene todo el codigo que esta en bucket de S3 al cual hace referencia tu proyecto.
 
 
 # Documentación del Script de PySpark
