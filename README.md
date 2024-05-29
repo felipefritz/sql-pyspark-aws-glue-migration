@@ -2,7 +2,21 @@
 
 Esta plantilla está diseñada para facilitar la lectura y reutilización de código. A continuación, se describen las clases y directrices a seguir:
 
-# Documentación del Script de PySpark en Formato Markdown
+## Configuracion general:
+
+1. Usar el archivo index.py como referencia para realizar un nuevo Job
+   1. Copiar el contenido de **index.py** y tambien lo que esta en **terraform/glue.tf** y pegarlo en tu proyecto
+2. Reemplazar la linea 4 en los archivos de variables de terraform (terraform/variables_desa.tfvars, etc..)
+   1. Usar este archivo: **"--extra-py-files" = "s3://sftp-ctabeneficio-dev/glue/LIBRARY/index_pyspark.py"**
+
+3. El archivo template_base.py contiene un main mas limpio en el cual puedes adaptar el job a tu manera apoyandote en los archivos de /documentacion.
+4. El archivo index.py es una template con codigo que se utiliza para jobs de lecutra de tablas, insertar o actualizar tablas sql y generar interface.
+
+## Archivo index_pysppark.py
+5. Este archivo es el que contiene todo el codigo que esta en bucket de S3 al cual hace referencia tu proyecto ( Ya no es Index.py)
+
+
+# Documentación del Script de PySpark
 
 ## Descripción General
 Este script en Python utiliza PySpark para realizar operaciones de procesamiento de datos y manejo de bases de datos. Está diseñado para ser ejecutado en un entorno de AWS Glue, interactuando con AWS Secret Manager para la gestión de secretos, y utilizando PyMySQL para operaciones de base de datos.
@@ -45,7 +59,7 @@ Este script en Python utiliza PySpark para realizar operaciones de procesamiento
 #### Métodos Principales
 - `bulk_insert_with_threads(self, data, query, data_connect, chunk_size=15000, max_threads=100)`: Inserta datos en la base de datos utilizando múltiples hilos.
 - `connect_db(data_connect)`: Establece una conexión con la base de datos.
-- `execute_SQL_select(query, data_connect)`: Ejecuta una consulta SELECT en la base de datos.
+
 
 ### Clase `ResponseManager`
 #### Descripción
@@ -59,40 +73,10 @@ Este script en Python utiliza PySpark para realizar operaciones de procesamiento
 #### Descripción
 - Almacena y gestiona consultas SQL.
 
-#### Métodos Principales
-- `select_intereses_bigdata(table_name, event_date)`: Genera una consulta SELECT de ejemplo.
-- `query_insert_masivo(table_name, column_names, data)`: Genera una consulta de inserción masiva.
 
 ### Clase `PysparkClient`
 #### Descripción
 - Cliente de PySpark para la carga y escritura de DataFrames.
-
-#### Métodos Principales
-- `load_dataframe_from_table(self, table_name, connection_type)`: Carga un DataFrame desde una tabla de base de datos.
-- `write_dataframe_ignoring_duplicates(self, df, table_name, connection_type)`: Escribe un DataFrame en la base de datos ignorando duplicados.
-
-## Funciones Principales del Script
-
-### `inicializar_proceso(args)`
-- Inicializa el proceso y valida las variables.
-- Retorna instancias de las clases necesarias para el proceso.
-
-### `insertar_datos_masivos(...)`
-- Inserta datos masivamente en la base de datos.
-
-
-### `actualizar_datos_masivos(...)`
-- Actualiza datos masivamente en la base de datos.
-
-### `generate_files_upload_interface(...)`
-- Genera y sube archivos de interfaz.
-
-### `obtener_data_con_pyspark(...)`
-- Obtiene datos de la base de datos utilizando PySpark .
-
-### `obtener_data_con_pymysql(...)`
-- Obtiene datos de la base de datos utilizando pymysql .
-
 
 
 
@@ -108,13 +92,13 @@ Este script en Python utiliza PySpark para realizar operaciones de procesamiento
 4. **Logs**: Monitoree los logs para seguimiento y depuración.
 
 ## IMPORTANTE
-1. Si el job tiene mas parametros como table_name2, date_2, se deben especificar en la clase ambiente y obtenerlos desde args.
+1. Si el job tiene mas parametros como table_name2, date_2, se deben especificar como ambiente.parametro2 = args['parametros_2"].
 
 2. Conexiones a bases de datos: 
 - Una vez realizada una consulta a la base de datos, automaticamente se cerrara la conexion (DatabaseManager.execute_SQL_select())
 - Cada consulta de tipo select, esta retornara los datos(lista de tuplas) y nombres de columnas (list)
 
-3. Manejo de errores 
+1. Manejo de errores 
 
 - Al extender clases y crear nuevas funciones, no se debe utiliza el siguiente formato para retornar errores:
     ```python
@@ -151,89 +135,121 @@ Este script en Python utiliza PySpark para realizar operaciones de procesamiento
 ## Ejemplo de uso para main()
 
 ```python
+from index_pyspark import Init, DataManager, PysparkUtils
+
+from pyspark.sql.functions import col, udf
+from pyspark.sql.types import StringType
+
+
 def main():
-
+    
     try:
-        # ------------------------------------------------- 0 Cargar y validar secretos -----------------------------------------------------------------------
- 
-        args = getResolvedOptions(sys.argv, ['JOB_NAME','date','table_name','interface_output']) # ESPECIFICA aca nuevas variables de args
-        ambiente, db_manager, sql_query_manager, data_processor, process_response, pyspark_client, file_manager = inicializar_proceso(args)
-
-
-        # -------------------------------------------------- 1 OBTENER QUERIES SQL -------------------------------------------------------------------------
-        ## Declara tus queries sql como funciones en la clase SQLQueryManager con el decorador @staticmethod y utilizalas de esta manera:
-        query_1 = sql_query_manager.select_intereses_bigdata(table_name=ambiente.table_name, event_date=ambiente.event_date)
-
-
-        # -------------------------------------------------- 2 CARGAR DATOS ---------------------------------------------------------------------------------
-        # Puedes cargar datos con PYMYSQL el cual retornara data y column_names, y tambien puedes cargar datos con PYSPARK
-
-        # CON PYMYSQL
-        data, column_names = obtener_data_con_pymysql(data_connect=ambiente.data_connect_batch, # ESPECIFICAR data_connect_batch o data_connect_dms
-                                                      query=query_1)
-        # CON PYSPARK                                            
-        df, column_names, data_pyspark = obtener_data_con_pyspark(pyspark_client=pyspark_client,
-                                                                  data_connect_type='batch', # ESPECIFICAR tipo de conexion 'batch' o 'dms'
-                                                                  table_name=ambiente.table_name) # ESPECIFICAR NOMBRE DE TABLA
-
-
-        ## ------------------------------------------------- 3 TRANSFORMACION DE DATOS -----------------------------------------------------------------------
-        df = df.withColumn("monto", lit("1000")).withColumn("nuevo_monto", lit("2000")) 
-        # Si son pocos registros puedes utilizar la transformacion de manera convencional utilizando:
-        data_processor.generate_interface(db_results=data, event_date=ambiente.date)
-
-
-        ## ----------------------------------------------- 4 INSERTAR DATOS O ACTUALIZAR -----------------------------------------------------------------------------
-        # Se realiza a traves de pymysql con hilos, y se insertan los datos de forma masiva con los datos divididos en trozos de 15000 y 100 threads
-        if data and column_names: # especifica donde tienes los datos y nombre de columnas
-            insertar_datos_masivos(sql_query_manager,
-                                    ambiente,
-                                    db_manager,
-                                    ambiente.data_connect_batch, # ESPECIFICA TIPO DE CONEXION ambiente.data_connect_batch o ambiente.data_connect_dms
-                                    column_names, # ESPECIFICA column_names
-                                    data) # ESPECIFICA DATOS COMO LISTA DE TUPLAS
-
-            actualizar_datos_masivos(sql_query_manager=sql_query_manager,
-                                    ambiente=ambiente,
-                                    db_manager=db_manager,
-                                    data_connect =ambiente.data_connect_batch, # ESPECIFICA TIPO DE CONEXION ambiente.data_connect_batch o ambiente.data_connect_dms
-                                    column_names =column_names, # ESPECIFICA column_names []
-                                    data=data,
-                                    condition_column = "num_cta" # especifica el nombre de la columna de la sentencia WHERE
-                                    is_upsert=False)  # especifica si necesitas insertar o actualizar los registros
-                                  
-
-        # 4. ------------------------------------------------ 5 GENERAR INTERFACE ------------------------------------------------------------------------------
-        # Si no hay datos, la funcion se encargara de generar un archivo vacio y subirlo a AWS.
-
-        generate_files_upload_interface(data=data, # ESPECIFICAR LA DATA EN FORMATO LISTA DE TUPLAS
-                                        ambiente=ambiente,
-                                        data_processor=data_processor,
-                                        file_manager=file_manager)
+        logger.info('INICIALIZANDO VARIABLES DE ENTORNO Y CONFIGURANDO AMBIENTES...')
         
-        return process_response.success()
+        args = Init.load_args_from_aws(args=['JOB_NAME', 'date', 'table_name', 'interface_output']) 
+        logger, process_response = Init.inicializar_logger_y_response(args=args)
+        ambiente, db_manager, sql_query_manager, data_processor, pyspark_client, file_manager = Init.inicializar_proceso(args, glue_logger=logger)
+        
+        # Configurar interface output:
+        ambiente.interface_output_name = args['interface_output']
+        ambiente.interface_routes_input = ambiente.generate_name_routes_file(interface_name= ambiente.interface_output_name,
+                                                                             glue_route='FTP_OUTPUT')
+        
+        
+        logger.info('OBTENIENDO QUERIES DEL PROCESO...')    
+        # Logica de establecer o llamar queries (fuera del main)   
+        query_ejemplo = f"select * from {ambiente.table_name}"    
+        
+        
+        logger.info('CARGANDO DATOS DEL JOB...')  
+        ## Logica para cargar tablas, ejemplo:    
+        ## df = pyspark_client.load_dataframe_from_query(query=query_ejemplo, connection_type='batch') # Reemplazar query
+        ## df.show()
+
+
+        logger.info('MAPEANDO FUNCIONES LIB A PYSPARK...')    
+        # Logica Convertir funciones de Lib o funciones de python a pyspark...
+        valida_monto = udf(ambiente.LIB.validateAmount, StringType())        
+        validate_string = udf(ambiente.LIB.validateEmptyValue, StringType())
+        
+
+        logger.info('VALIDANDO Y LIMPIANDO DATOS...')      
+         # Logica de limpiar o validar dataframes...
+
+
+        logger.info('TRANSFORMANDO Y PROCESANDO DATOS...')      
+        # Logica de transformar datos...
+        
+        
+        
+        # LAS SECCIONES 1 Y 2 SON OPCIONALES SI NECESITAS INSERTAR O ACTUALIZAR UNA TABLA. 
+        # 1.
+        # logger.info('INSERTANDO DATOS DESDE PYSPARK A SQL...')
+        
+        
+        #  DataManager.insertar_datos_masivos(sql_query_manager,
+        #                                    db_manager,
+        #                                    data_connect=ambiente.data_connect_batch,  # REEMPLAZAR SI SE INSERTA EN DMS(MAMBU) O BATCH
+        #                                    column_names=df.columns,                   # REEMPLAZAR DATAFRAME O COLUMN NAMES COMO LISTA...
+        #                                    table_name=ambiente.table_name           # REEMPLAZAR CON NOMBRE DE TABLA A INSERTAR REGISTROS
+        #                                    )
+        
+        
+        
+        # 2.
+        # logger.info('ACTUALIZANDO DATOS DESDE PYSPARK A SQL...')
+        
+        #  DataManager.actualizar_datos_masivos(sql_query_manager=sql_query_manager,
+        #                              ambiente=ambiente,
+        #                              db_manager=db_manager,
+        #                              data_connect=ambiente.data_connect_batch,  # REEMPLAZAR SI SE INSERTA EN DMS(MAMBU) O BATCH
+        #                              table_name=ambiente.table_name             # REEMPLAZAR CON NOMBRE DE TABLA A ACTUALIZAR
+        #                              column_names=['col1', 'col2', 'col_condicion'],
+        #                              data=[(1, 'dato1', 3), (2, 'dato2', 4)],
+        #                              condition_column='col_condicion',          # EJEMPLO DE 'num_cta_mambu'
+        #                              is_upsert=True)                            # o False si es solo actualizar registros
+
+
+        logger.info('GENERANDO INTERFACE...')    
+        # Logica de generar interface... (descomentar lineas siguientes y reemplazar variables si es necesario)
+        # data_as_list_of_tuples = []  
+        # data_as_list_of_tuples = pyspark_client.dataframe_to_list_of_tuples(dataframe=df)
+        
+        # DataManager.insertar_datos_masivos(sql_query_manager, db_manager, data_connect=ambiente.data_connect_batch, column_names=df, table_name=ambiente.table_name, column)
+        
+        # DataManager.generate_files_upload_interface(data=data_as_list_of_tuples, # ESPECIFICAR LA DATA EN FORMATO LISTA DE TUPLAS
+        #                                 ambiente=ambiente,
+        #                                 data_processor=data_processor,
+        #                                 file_manager=file_manager,
+        #                                 logger=logger)
     
     except ValueError as e:
         # Errores del codigo
-
-        """"
-            Si hay un error en cualquier parte del codigo que utiliza: 
-            (recuerda siempre utilizar este bloque para manejar errores y levantarlos con raise ValueError() en tus funciones)
-
-            try:
-                tu codigo...
-            except Exception as e:
-                raise ValueError(f"[NombreClase.NombreFuncion] ERROR: {str(e)}")
-
-            se capturara aca y retornara:
-            {'status': 400, 'code': '-1', 'body': 'NOK'}
-        """
-        print(str(e))
+        
+        logger.exception(f"ERROR DE PROCESO")
+        
+        # Si falla se genera archivo vacio
+        DataManager.generate_files_upload_interface(data=[], # ESPECIFICAR LA DATA EN FORMATO LISTA DE TUPLAS
+                                        ambiente=ambiente,
+                                        data_processor=data_processor,
+                                        file_manager=file_manager,
+                                        logger=logger)
         return process_response.error(error_message=str(e))
 
     except Exception as e:
         # Errores inesperados
-        print(f'Error inesperado: {str(e)}')
-        return process_response.error(error_message=str(e))
+        logger.exception(f"ERROR INTESPERADO")
+        # Si falla se genera archivo vacio
+        DataManager.generate_files_upload_interface(data=[], # ESPECIFICAR LA DATA EN FORMATO LISTA DE TUPLAS
+                                        ambiente=ambiente,
+                                        data_processor=data_processor,
+                                        file_manager=file_manager,
+                                        logger=logger)
+        
+    return process_response.success()
+        
+        
+if __name__ == '__main__':
+    main()
 
 ```
